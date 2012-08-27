@@ -1,0 +1,113 @@
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+sourceCompatibility = 1.5
+targetCompatibility = 1.5
+
+version = '1.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'commons-collections:commons-collections:3.2'
+
+    testCompile 'junit:junit:4.10',
+                'org.easytesting:fest-assert:1.4'
+}
+
+jar {
+    manifest.attributes['Implementation-Title'] = project.name
+    manifest.attributes['Implementation-Version'] = project.version
+
+    from("${rootProject.projectDir}/src/dist") {
+        include "license.txt"
+        include "notice.txt"
+        into "META-INF"
+        expand(copyright: new Date().format('yyyy'), version: project.version)
+    }
+}
+
+javadoc {
+    options.memberLevel = org.gradle.external.javadoc.JavadocMemberLevel.PROTECTED
+    options.author = true
+    options.header = project.name
+}
+
+task sourcesJar(type: Jar, dependsOn:classes) {
+    classifier = 'sources'
+    from sourceSets.main.allJava.srcDirs
+    include '**/*.java', '**/*.aj'
+}
+
+task javadocJar(type: Jar) {
+    classifier = 'javadoc'
+    from javadoc
+}
+
+build.dependsOn javadocJar, sourcesJar
+
+// =========================================
+
+configurations {
+    jdk7 {
+        extendsFrom compile
+    }
+    jdk7Test {
+        extendsFrom jdk7, testCompile
+    }
+}
+
+sourceSets {
+    jdk7 {
+        java.srcDir file('src-jdk7/main/java')
+        resources.srcDir file('src-jdk7/main/resources')
+        compileClasspath += sourceSets.main.output + configurations.jdk7
+        runtimeClasspath += output + compileClasspath
+    }
+    jdk7Test {
+        java.srcDir file('src-jdk7/test/java')
+        resources.srcDir file('src-jdk7/test/resources')
+        compileClasspath += sourceSets.test.output + sourceSets.jdk7.output + sourceSets.jdk7.compileClasspath + configurations.jdk7Test
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configure([compileJdk7Java,compileJdk7TestJava]) {
+    sourceCompatibility = 1.7
+    targetCompatibility = 1.7
+    options.fork = true
+    options.forkOptions.executable = "${jdk7Home}/bin/javac"
+}
+
+configure([compileJava,compileJava]) {
+    options.fork = true
+    options.forkOptions.executable = "${jdk6Home}/bin/javac"
+}
+
+task jdk7Test(type: Test, dependsOn: test) {
+    testClassesDir = sourceSets.jdk7Test.output.classesDir
+    classpath = sourceSets.jdk7Test.runtimeClasspath
+    executable = "${jdk7Home}/bin/java"
+}
+
+test.executable = "${jdk6Home}/bin/java"
+
+jar {
+    from sourceSets.jdk7.output
+}
+
+javadoc {
+    source += sourceSets.jdk7.allJava
+    classpath += sourceSets.jdk7.compileClasspath
+    executable = "${jdk7Home}/bin/javadoc"
+}
+
+eclipse.jdt {
+    sourceCompatibility = 1.7
+    targetCompatibility = 1.7
+}
+
+check.dependsOn jdk7Test
+
